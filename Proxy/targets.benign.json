@@ -1,0 +1,55 @@
+{
+  "filesystem": {
+    "transport": "http", "url": "http://127.0.0.1:9501/mcp",
+    "server_id": "filesystem", "package_version": "@modelcontextprotocol/server-filesystem@1.0.0",
+    "backend": {
+      "command": "/usr/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@1.0.0",
+               "/home/vboxuser/Documents/MCP-Proxy-Research/servers/filesystem/benign_workspace"]
+    }
+  },
+  "git": {
+    "transport": "http", "url": "http://127.0.0.1:9502/mcp",
+    "server_id": "git", "package_version": "mcp-server-git (pip)",
+    "backend": {
+      "command": "/home/vboxuser/Documents/MCP-Proxy-Research/servers/git/.venv/bin/python",
+      "args": ["-m", "mcp_server_git", "--repository",
+               "/home/vboxuser/Documents/MCP-Proxy-Research/servers/git/benign_repo"]
+    }
+  },
+  "database": {
+    "transport": "http", "url": "http://127.0.0.1:9503/mcp",
+    "server_id": "database", "package_version": "safe-sqlite-server@1.0.0",
+    "backend": {
+      "command": "/usr/bin/python3",
+      "args": ["/home/vboxuser/Documents/MCP-Proxy-Research/servers/database/safe_sqlite_server.py",
+               "--db-path", "/home/vboxuser/Documents/MCP-Proxy-Research/servers/database/benign.db"]
+    }
+  },
+  "everything": {
+    "transport": "http", "url": "http://127.0.0.1:9504/mcp",
+    "server_id": "everything", "package_version": "@modelcontextprotocol/server-everything",
+    "backend": {
+      "command": "/usr/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything", "stdio"]
+    }
+  },
+  "memory": {
+    "transport": "http", "url": "http://127.0.0.1:9505/mcp",
+    "server_id": "memory", "package_version": "@modelcontextprotocol/server-memory",
+    "backend": {
+      "command": "/usr/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {"MEMORY_FILE_PATH": "/home/vboxuser/Documents/MCP-Proxy-Research/servers/memory/benign_memory.json"}
+    }
+  },
+  "catalog": {
+    "transport": "http", "url": "http://127.0.0.1:9506/mcp",
+    "server_id": "catalog", "package_version": "poisoned-server@1.0.0 (baseline)",
+    "backend": {
+      "command": "/usr/bin/python3",
+      "args": ["/home/vboxuser/Documents/MCP-Proxy-Research/servers/poisoned/poisoned_server.py"],
+      "env": {"POISON_MODE": "baseline"}
+    }
+  }
+}

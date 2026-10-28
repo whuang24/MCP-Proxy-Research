@@ -1,0 +1,23 @@
+# virtualenvs
+.venv/
+servers/git/.venv/
+# python
+__pycache__/
+*.pyc
+# node
+node_modules/
+# archived labs are their own git repos (pushed separately); don't nest them
+archive/
+# secrets
+Proxy/.env
+# generated repos (recreate: servers/git/init_repos.sh)
+servers/git/benign_repo/
+servers/git/attack_repo/
+# generated db (recreate: servers/database/seed.py)
+servers/database/benign.db
+# runtime logs + telemetry
+Proxy/logs/*.jsonl
+telemetry/receipts.jsonl
+telemetry/dataset.jsonl
+telemetry/runs/*.jsonl
+telemetry/.prompt_counter

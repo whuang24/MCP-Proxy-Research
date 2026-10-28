@@ -1,0 +1,48 @@
+{
+  "filesystem": {
+    "transport": "http", "url": "http://127.0.0.1:9601/mcp",
+    "server_id": "filesystem", "package_version": "vuln-fs-server (pre-0.6.3 repro)",
+    "backend": {
+      "command": "/usr/bin/python3",
+      "args": ["/home/vboxuser/Documents/MCP-Proxy-Research/servers/filesystem/vuln_fs_server.py",
+               "--allowed-dir",
+               "/home/vboxuser/Documents/MCP-Proxy-Research/servers/filesystem/attack_workspace"]
+    }
+  },
+  "git": {
+    "transport": "http", "url": "http://127.0.0.1:9602/mcp",
+    "server_id": "git", "package_version": "mcp-server-git (pip)",
+    "backend": {
+      "command": "/home/vboxuser/Documents/MCP-Proxy-Research/servers/git/.venv/bin/python",
+      "args": ["-m", "mcp_server_git", "--repository",
+               "/home/vboxuser/Documents/MCP-Proxy-Research/servers/git/attack_repo"]
+    }
+  },
+  "memory": {
+    "transport": "http", "url": "http://127.0.0.1:9603/mcp",
+    "server_id": "memory", "package_version": "@modelcontextprotocol/server-memory",
+    "backend": {
+      "command": "/usr/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {"MEMORY_FILE_PATH": "/home/vboxuser/Documents/MCP-Proxy-Research/servers/memory/attack_memory.json"}
+    }
+  },
+  "catalog": {
+    "transport": "http", "url": "http://127.0.0.1:9604/mcp",
+    "server_id": "catalog", "package_version": "poisoned-server@1.0.0 (poisoned)",
+    "backend": {
+      "command": "/usr/bin/python3",
+      "args": ["/home/vboxuser/Documents/MCP-Proxy-Research/servers/poisoned/poisoned_server.py"],
+      "env": {"POISON_MODE": "poisoned"}
+    }
+  },
+  "sink": {
+    "transport": "http", "url": "http://127.0.0.1:9605/mcp",
+    "server_id": "sink", "package_version": "sink-mock-exec@1.0.0",
+    "backend": {
+      "command": "/usr/bin/python3",
+      "args": ["/home/vboxuser/Documents/MCP-Proxy-Research/servers/sink/sink_server.py"],
+      "env": {"SINK_RECEIPTS": "/home/vboxuser/Documents/MCP-Proxy-Research/telemetry/receipts.jsonl"}
+    }
+  }
+}

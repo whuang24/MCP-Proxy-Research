@@ -1,0 +1,3 @@
+{"type":"entity","name":"ProjectAlpha","entityType":"workspace","observations":["Workspace A: internal planning docs","Status: active"]}
+{"type":"entity","name":"AliceA","entityType":"person","observations":["Member of Workspace A","Owns the planning backlog"]}
+{"type":"relation","from":"AliceA","to":"ProjectAlpha","relationType":"member_of"}
