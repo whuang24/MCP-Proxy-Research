@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Launch the full testbed: bridges + two role-separated HTTP proxies.
-#   benign proxy -> :8790  (serves targets.benign.json)
-#   attack proxy -> :8795  (serves targets.attack.json)
+# Launch the full testbed: all server bridges + ONE combined HTTP proxy.
+#   proxy -> :8790  (serves targets.json: benign routes + attack-variant routes)
+# Benign and attack tasks share this port; the proxy's combined log labels each
+# exchange successful / failed / benign (see Proxy/classifier.py).
 set -euo pipefail
 cd "$(dirname "$0")/Proxy"
 set -a; . ./.env; set +a
@@ -12,16 +13,13 @@ bash ../servers/git/init_repos.sh
 python3 ../servers/database/seed.py --db-path ../servers/database/benign.db
 
 echo "== bridges =="
-"$PY" start_bridges.py targets.benign.json &  B1=$!
-"$PY" start_bridges.py targets.attack.json &  B2=$!
+"$PY" start_bridges.py targets.json &  B1=$!
 sleep 6   # npx may fetch server-everything / server-memory on first run
 
-echo "== proxies =="
-PROXY_PORT=8790 PROXY_ROLE=benign TARGETS_FILE=targets.benign.json \
-  LOCAL_LOG_PATH=logs/proxy.benign.jsonl "$PY" proxy_server.py &  P1=$!
-PROXY_PORT=8795 PROXY_ROLE=attack TARGETS_FILE=targets.attack.json \
-  LOCAL_LOG_PATH=logs/proxy.attack.jsonl "$PY" proxy_server.py &  P2=$!
+echo "== proxy =="
+PROXY_PORT=8790 TARGETS_FILE=targets.json LOCAL_LOG_PATH=logs/proxy_traffic.jsonl \
+  "$PY" proxy_server.py &  P1=$!
 
-echo "benign :8790  attack :8795  (Ctrl-C to stop)"
-trap 'kill $B1 $B2 $P1 $P2 2>/dev/null || true' INT TERM
+echo "proxy :8790  (combined; Ctrl-C to stop)"
+trap 'kill $B1 $P1 2>/dev/null || true' INT TERM
 wait

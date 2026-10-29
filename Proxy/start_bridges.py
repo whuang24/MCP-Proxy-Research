@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-targets_file = sys.argv[1] if len(sys.argv) > 1 else "targets.benign.json"
+targets_file = sys.argv[1] if len(sys.argv) > 1 else "targets.json"
 targets = json.load(open(targets_file))
 
 procs = []

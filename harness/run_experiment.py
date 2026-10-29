@@ -2,9 +2,13 @@
 """
 Experiment harness for the MCP-Proxy-Research.
 
-Drives each experiment's BENIGN path through the benign proxy (:8790) and its
-ATTACK path through the attack proxy (:8795) -- physical task-level separation.
-For every tool call it emits one strict-schema telemetry record (OWASP report
+Drives both the BENIGN and ATTACK paths of each experiment through the single
+combined proxy (:8790). The task's intent selects which server variant each step
+addresses -- benign tasks hit the safe routes (filesystem, git, memory, catalog)
+and attack tasks hit the attack-variant routes (filesystem_vuln, git_attack,
+memory_attack, catalog_poisoned, sink). The proxy's own combined log labels every
+exchange benign/successful/failed; this harness additionally emits one
+strict-schema telemetry record per tool call (OWASP report
 section 6) augmented with the host-side prompt fields that the opencode plugin
 would capture (user_prompt, agent, prompt_id, session_id). Ground truth for
 exfiltration / execution comes from the sink server's independent receipts.
@@ -30,7 +34,18 @@ RECEIPTS = os.path.join(TELE, "receipts.jsonl")
 DATASET = os.path.join(TELE, "dataset.jsonl")
 COUNTER = os.path.join(TELE, ".prompt_counter")
 
-PROXY = {"benign": "http://127.0.0.1:8790", "attack": "http://127.0.0.1:8795"}
+PROXY_BASE = "http://127.0.0.1:8790"   # single combined proxy
+
+# An attack-intent step addresses the attack variant of its logical server.
+ATTACK_SERVER = {"filesystem": "filesystem_vuln", "git": "git_attack",
+                 "memory": "memory_attack", "catalog": "catalog_poisoned"}
+
+
+def srv_name(server, intent):
+    """Map a step's logical server name to the actual proxy route for the intent."""
+    return ATTACK_SERVER.get(server, server) if intent == "attack" else server
+
+
 TOKEN = ""
 for line in open(os.path.join(ROOT, "Proxy", ".env")):
     if line.startswith("PROXY_AUTH_TOKEN="):
@@ -39,10 +54,9 @@ for line in open(os.path.join(ROOT, "Proxy", ".env")):
 EXPERIMENTS = json.load(open(os.path.join(HERE, "experiments.json")))
 PATHS = EXPERIMENTS.pop("_paths")
 
-PKG = {}
-for _role, _tf in (("benign", "targets.benign.json"), ("attack", "targets.attack.json")):
-    _cfg = json.load(open(os.path.join(ROOT, "Proxy", _tf)))
-    PKG[_role] = {k: v.get("package_version") for k, v in _cfg.items()}
+# package_version per actual proxy route, from the merged targets file.
+PKG = {k: v.get("package_version")
+       for k, v in json.load(open(os.path.join(ROOT, "Proxy", "targets.json"))).items()}
 
 READ_TOOLS = {"read_file", "read_text_file", "git_log", "git_status", "git_diff",
               "git_diff_unstaged", "git_diff_staged", "git_show", "read_graph",
@@ -183,13 +197,13 @@ def marker_id(text):
 
 def run_one(exp_id, exp, intent, repeat_idx):
     spec = exp[intent]
-    role = "benign" if intent == "benign" else "attack"
-    base = PROXY[role]
+    role = intent
+    base = PROXY_BASE
     run_id = uuid.uuid4().hex[:16]
     session_id = "ses_" + uuid.uuid4().hex[:24]
     prompt_id = next_prompt_id()
     prompt_ts = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
-    servers = sorted({s["server"] for s in spec["steps"]})
+    servers = sorted({srv_name(s["server"], intent) for s in spec["steps"]})
     for srv in servers:  # handshake per server used
         post(f"{base}/mcp/{srv}", {"jsonrpc": "2.0", "id": 0, "method": "initialize",
              "params": {"protocolVersion": "2024-11-05", "capabilities": {},
@@ -200,7 +214,7 @@ def run_one(exp_id, exp, intent, repeat_idx):
     prev_text = ""
     rpc = 100
     for i, step in enumerate(spec["steps"]):
-        srv = step["server"]
+        srv = srv_name(step["server"], intent)
         is_list = bool(step.get("list"))
         tool = step.get("tool")
         rpc += 1
@@ -241,7 +255,7 @@ def run_one(exp_id, exp, intent, repeat_idx):
         rec = {
             # --- identity ---
             "experiment_id": exp_id, "run_id": run_id, "scenario_id": f"{exp_id}-{intent}",
-            "server_id": srv, "package_version": PKG.get(role, {}).get(srv),
+            "server_id": srv, "package_version": PKG.get(srv),
             # --- correlation ---
             "connection_id": f"{role}:{srv}:{run_id[:8]}", "session_id": session_id,
             "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
