@@ -10,9 +10,9 @@ A single tool call leaves a trail in up to three places, correlated by ids:
 
 | File | What it holds | Written by |
 |---|---|---|
-| `Proxy/logs/proxy_traffic.jsonl` | Every MCP message in and out of the proxy, two lines per exchange, each tagged `label` + `category`. **The primary log.** | Proxy (`proxy_server.py` → `logger.py`) |
-| `telemetry/receipts.jsonl` | Independent receipts for every exfil/exec attempt sent to the sink. **The ground truth for E2/E5.** | Sink MCP server (`sink_server.py`) |
-| `~/.config/opencode/.../host_trace.json` | The user prompt and agent behind each call, captured host-side. Only present in live opencode runs. | MCP Host plugin (`mcp-trace.js`) |
+| `Proxy/logs/proxy_traffic.jsonl` | **The primary log.** Every MCP message in and out of the proxy, two lines per exchange, each tagged using `label` + `category`.  | Proxy (`proxy_server.py` → `logger.py`) |
+| `telemetry/receipts.jsonl` | **The logging for E2/E5.** Independent receipts for every exfil/exec attempt sent to the sink.  | Sink MCP server (`sink_server.py`) |
+| `~/.config/opencode/.../host_trace.json` | **Prompt Log.** The user prompt and agent used, captured host-side. Only present in live opencode runs. | MCP Host plugin (`mcp-trace.js`) |
 
 `telemetry/dataset.jsonl` is a fourth, separate artifact: the strict §6
 analysis schema assembled by `harness/run_experiment.py`, not a raw log. Its
@@ -20,10 +20,9 @@ fields are documented in [README.md](README.md#telemetry-schema).
 
 ### How the three join
 
-- `proxy_traffic.jsonl` pairs its own two lines by **`trace_id`** (one request
-  line + one response line, both carrying the same `label`/`category`).
+- `proxy_traffic.jsonl` pairs its own two lines by **`trace_id`** (request + response, both carrying the same `label`/`category`).
 - The sink receipt corresponds to the `send_data`/`run_command` exchange on the
-  `sink` server; match by time order and payload.
+  `sink` server; match by time order and payload. (May be flawed, not guaranteed match)
 - The host plugin's prompt record links to proxy traffic by **`session_id`** +
   run window (`prompt_id` groups the tool calls a single prompt caused).
 
@@ -120,66 +119,56 @@ leaked one is `(successful, E4)`.
 
 ## Building a benign-traffic baseline
 
-A detector needs to know what "normal" looks like before anomalies mean
-anything. These are the parameters most worth profiling from the `benign`
-subset, and why each matters:
+Primary focus is on the user prompt provided to the MCP Host and collected by the
+Opencode plugin.
+
+- **`user_prompt` + `agent` (declared intent).** The host-side prompt is the only
+  record of what the user actually asked for.
+
+The following are other potentially useful parameters that could contribute to the
+development of a baseline complimentary of user prompt, which is the primary benign 
+baseline building factor.
+
+These are the parameters most worth profiling from the `benign`subset, and why each matters:
 
 - **`server` + `raw_payload.params.name` (the tool mix).** The joint
-  distribution of which backends are called and which tools on them is the
-  backbone of any baseline. Benign work concentrates in a predictable handful of
-  read tools per server; a call to a server or tool that never appears in the
+  distribution of which backends are called and which tools accessed on them is
+  the foundation of the baseline. Benign work concentrates in a predictable manner of
+  tool reads and accesses per server; a call to a server or tool that never appeared in the
   baseline, or a sudden shift in the proportions, is a first-order anomaly. This
   pair is crucial because almost every attack family first shows up as an unusual
   server/tool choice (`send_data`, `run_command`, a `read_file` on a route that
-  normally only lists).
+  normally only lists). 
 
 - **`outcome` and the error rate it implies.** Benign traffic is overwhelmingly
   `response_received` with a small, stable fraction of ordinary errors. Baselining
   the error-rate and the specific `outcome` values that occur normally lets you
   treat spikes in `tool_error`, `blocked_invalid_identifier`, or
-  `rejected_unauthorized` as signal. It is crucial because "failed attack" traffic
-  is largely a deviation in this one field, so its benign distribution is the
-  reference everything else is measured against.
+  `rejected_unauthorized` as signal.
 
-- **Argument shape: `arg_keys` and the values in `params.arguments` (paths
-  staying in-root, no `..`, queries that are read-only).** Benign calls use a
+- **Argument shape: `arg_keys` + values in `params.arguments`** Benign calls use a
   narrow, well-formed set of argument keys and stay inside allowed roots. Profiling
-  the normal key sets and path/query patterns gives you the envelope that
-  traversal (`..`), command injection (`command`), and exfil (`destination`)
-  arguments fall outside of. This is crucial because the attack intent often lives
-  entirely in the argument values while the tool name still looks ordinary.
+  the normal key sets and path/query patterns provides guideline on regular traffic paths,
+  , and outcasts any command injection (`command`), and exfil (`destination`)
+  arguments falling outside of this guideline. This is crucial because the attack intent
+  often lives entirely in the argument values while the tool name still looks ordinary.
 
 - **`duration_ms` (latency profile).** Each tool on each server has a
-  characteristic benign latency band. A baseline of these bands turns timing into
-  a cheap anomaly signal (an unusually long read, a call that stalls). It matters
+  characteristic benign latency band. A baseline of these bands turns prolonged timing
+  into a cheap sidelining anomalous signal. It matters
   because some abuse patterns and resource-exhaustion behaviors are visible in
-  timing before they are visible in content.
+  timing before they are visible in content due to extra requirement to search for
+  sensitive or exfiltration worthy data.
 
 - **Call sequences per `session_id` / `prompt_id` (shape of a task).** Benign
   tasks produce recognizable ordered sequences of calls (for example, list a
   repo, read its README, check status). Modeling these sequences, not just
-  individual calls, is what lets you flag an out-of-place step such as a read
+  individual calls, allows the flagging of out-of-place step such as a read
   immediately followed by a `send_data`. It is crucial because several families
   (E1 injection, E2 exfil, the E3 rug-pull chain) are defined by the *transition*
-  between calls rather than any single call.
-
-- **`user_prompt` + `agent` (declared intent).** The host-side prompt is the only
-  record of what the user actually asked for. A baseline that ties benign prompts
-  to the tool-call patterns they normally produce lets you detect calls that the
-  stated intent does not justify (the policy gap behind E1/E2). It is crucial
-  because it supplies the "should this have happened?" context that the proxy,
-  seeing only MCP messages, cannot infer on its own.
-
-- **Absence of synthetic markers and watchlist hits in content
-  (`result.content[].text`, `keywords.matched_watchlist`).** In benign traffic
-  these are essentially always empty. Establishing that emptiness as the baseline
-  is what makes any marker or watchlist hit meaningful. Note this is partly
-  testbed-specific (real deployments have no planted markers), so treat markers as
-  ground-truth validation and `matched_watchlist` as the transferable content
-  signal.
+  between calls rather than any single call. (Potential **tool chaining**)
 
 A practical baseline is therefore not one field but a small joint profile:
 per-`server`/`tool` frequencies, the normal `outcome` and `duration_ms`
 distributions, the allowed argument envelope, and the typical call sequence per
-prompt. Markers and receipts are kept aside as the ground-truth oracle used to
-score whatever the baseline flags.
+prompt.
